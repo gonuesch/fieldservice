@@ -3,31 +3,22 @@
 import streamlit as st
 import matplotlib.colors as mcolors
 
-# Wir stellen sicher, dass die Module gefunden werden
-# (Diese Methode ist die robusteste für Cloud-Umgebungen)
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from daten import lade_daten
-from karten import zeichne_karte
+# Die Imports verweisen jetzt explizit auf das 'src'-Paket.
+# Das ist die robusteste Methode.
+from src.daten import lade_daten
+from src.karten import zeichne_karte
 
 # --- SEITEN-KONFIGURATION ---
 st.set_page_config(layout="wide", page_title="Gebietsplanung", page_icon="🗺️")
 
-# --- LOGIN-LOGIK UND APP-STEUERUNG ---
+# --- LOGIN-LOGIK UND APP-STEUERUNG (unverändert) ---
 if not st.user.is_logged_in:
-    # Zeige den Login-Button, wenn der Nutzer nicht eingeloggt ist.
     st.title("Willkommen beim Gebietsplanungs-Tool")
     st.info("Bitte melden Sie sich mit Ihrem Google-Konto an, um fortzufahren.")
     st.button("Mit Google einloggen", on_click=st.login, args=("google",))
 else:
-    # Wenn der Nutzer eingeloggt ist, prüfe seine E-Mail-Adresse
     user_email = st.user.email
-    allowed_emails = [
-        "gordon.nuesch@rowohlt.de"
-        # Fügen Sie hier weitere berechtigte E-Mail-Adressen hinzu
-    ]
+    allowed_emails = ["gordon.nuesch@rowohlt.de"]
 
     if user_email in allowed_emails:
         # ---- ERLAUBTER ZUGRIFF: Die eigentliche App anzeigen ----
@@ -40,7 +31,7 @@ else:
         df = lade_daten()
 
         if not df.empty:
-            # Hier folgt der gesamte restliche Dashboard-Code...
+            # Hier folgt der gesamte restliche UI-Code, der unverändert bleibt
             st.sidebar.header("Filter-Optionen")
             verlag_optionen = ['Alle Verlage'] + sorted(df['Verlag'].unique().tolist())
             selected_verlag = st.sidebar.selectbox('Verlag auswählen:', verlag_optionen)
@@ -71,7 +62,6 @@ else:
             
             zeichne_karte(df_filtered, farb_map)
     else:
-        # ---- UNERLAUBTER ZUGRIFF ----
         st.error("Zugriff verweigert.")
         st.warning(f"Ihre E-Mail-Adresse ({user_email}) ist für diese Anwendung nicht freigeschaltet.")
         st.button("Logout", on_click=st.logout)
