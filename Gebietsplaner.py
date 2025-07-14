@@ -10,8 +10,8 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Import der ausgelagerten Funktionen
-from daten import lade_basis_daten, lade_szenarien_liste, lade_szenario_zuweisung, speichere_szenario
-from karten import zeichne_karte
+from src.daten import lade_basis_daten, lade_szenarien_liste, lade_szenario_zuweisung, speichere_szenario
+from src.karten import zeichne_karte
 
 # --- SEITEN-KONFIGURATION ---
 st.set_page_config(
