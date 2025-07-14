@@ -18,7 +18,10 @@ if not st.user.is_logged_in:
     st.button("Mit Google einloggen", on_click=st.login, args=("google",))
 else:
     user_email = st.user.email
-    allowed_emails = ["gordon.nuesch@rowohlt.de"]
+    allowed_emails = ["gordon.nuesch@rowohlt.de",
+                     "imke.schuster@rowohlt.de",
+                      "antje.buhl@droemer-knaur.de",
+                      "heidi.wuebbelsmann@rowohlt.de"]
 
     if user_email in allowed_emails:
         # ---- ERLAUBTER ZUGRIFF: Die eigentliche App anzeigen ----
