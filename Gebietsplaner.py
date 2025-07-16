@@ -30,7 +30,10 @@ else:
     # Wenn der Nutzer eingeloggt ist, prüfe seine E-Mail-Adresse
     user_email = st.user.email
     allowed_emails = [
-        "gordon.nuesch@rowohlt.de"
+        "gordon.nuesch@rowohlt.de",
+        "heidi.wuebbelsmann@rowohlt.de",
+        "imke.schuster@rowohlt.de",
+        "antje.buhl@droemer-knaur.de"
         # Fügen Sie hier weitere berechtigte E-Mail-Adressen hinzu
     ]
 
