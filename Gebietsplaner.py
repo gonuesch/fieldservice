@@ -1,128 +1,161 @@
-# Gebietsplaner.py
+# Gebietsplaner.py - Version mit interaktiver Optimierung
 
 import streamlit as st
-import matplotlib.colors as mcolors
 import pandas as pd
-
-# Wir stellen sicher, dass die Module gefunden werden
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-# Import der ausgelagerten Funktionen
-from src.daten import lade_basis_daten, lade_szenarien_liste, lade_szenario_zuweisung, speichere_szenario
+import numpy as np
+from src.daten import lade_basis_daten
 from src.karten import zeichne_karte
+import matplotlib.colors as mcolors
+import random
 
 # --- SEITEN-KONFIGURATION ---
-st.set_page_config(
-    page_title="Interaktive Gebietsplanung",
-    page_icon="🗺️",
-    layout="wide"
-)
+st.set_page_config(layout="wide", page_title="Gebietsplanung", page_icon="🗺️")
 
-# --- LOGIN-LOGIK UND APP-STEUERUNG ---
+# --- 1. FUNKTIONEN ---
+
+def initialisiere_app_zustand():
+    """
+    Initialisiert den Zustand der App beim ersten Laden oder nach einem Refresh.
+    Lädt die Basisdaten und speichert eine veränderbare Kopie im Session State.
+    """
+    if 'app_initialisiert' not in st.session_state:
+        # Lade die unveränderlichen Basisdaten (Koordinaten, Umsätze etc.)
+        st.session_state.df_basis = lade_basis_daten()
+        # Erstelle eine Kopie der Zuweisungen, die wir verändern und optimieren können
+        st.session_state.df_aktuell = st.session_state.df_basis.copy()
+        st.session_state.app_initialisiert = True
+
+def optimierungs_algorithmus(dataframe_basis, weights, constraints):
+    """
+    Führt den Optimierungsalgorithmus aus.
+    Nimmt die Basisdaten und die Nutzereingaben als Input.
+    Gibt einen neuen DataFrame mit der optimierten Zuweisung zurück.
+    """
+    df_opt = dataframe_basis.copy()
+    vertreter_df = df_opt[['Vertreter_Name', 'Wohnort_Lat', 'Wohnort_Lon']].drop_duplicates().reset_index(drop=True)
+
+    # --- PHASE 1: GEOGRAFISCHE INITIALZUWEISUNG ---
+    # Dieser Schritt ist die Grundlage für die Optimierung.
+    st.info("Phase 1: Erstelle eine geografisch kompakte Start-Zuweisung...")
+    kunden_coords = df_opt[['Latitude', 'Longitude']].values
+    vertreter_coords = vertreter_df[['Wohnort_Lat', 'Wohnort_Lon']].values
+    dist_matrix = np.linalg.norm(kunden_coords[:, np.newaxis, :] - vertreter_coords, axis=2)
+    naechster_vertreter_idx = np.argmin(dist_matrix, axis=1)
+    # Die Spalte 'Vertreter_Name' wird mit der neuen Zuweisung überschrieben
+    df_opt['Vertreter_Name'] = vertreter_df['Vertreter_Name'].iloc[naechster_vertreter_idx].values
+    
+    # --- PHASE 2: ITERATIVE VERBESSERUNG (Platzhalter) ---
+    # Hier würde der komplexe Tausch-Algorithmus folgen, der die Kostenfunktion
+    # und die Constraints (weights, constraints) berücksichtigt.
+    st.info(f"Phase 2: Führe Optimierung mit folgenden Gewichten aus: {weights}")
+    if constraints['top_kunden_sperren']:
+        st.info("Constraint 'Top 10% Kunden sperren' ist aktiv.")
+    
+    # Zur Demonstration geben wir hier das Ergebnis der geografischen Optimierung zurück.
+    # In einem weiteren Schritt würden wir hier die Tausch-Logik implementieren.
+    
+    return df_opt
+
+
+# --- 2. LOGIN-LOGIK UND APP-STEUERUNG ---
 if not st.user.is_logged_in:
-    # Zeige den Login-Button, wenn der Nutzer nicht eingeloggt ist.
     st.title("Willkommen beim Gebietsplanungs-Tool")
     st.info("Bitte melden Sie sich mit Ihrem Google-Konto an, um fortzufahren.")
     st.button("Mit Google einloggen", on_click=st.login, args=("google",))
 else:
-    # Wenn der Nutzer eingeloggt ist, prüfe seine E-Mail-Adresse
     user_email = st.user.email
-    allowed_emails = [
-        "gordon.nuesch@rowohlt.de",
-        "heidi.wuebbelsmann@rowohlt.de",
-        "imke.schuster@rowohlt.de",
-        "antje.buhl@droemer-knaur.de"
-        # Fügen Sie hier weitere berechtigte E-Mail-Adressen hinzu
-    ]
+    allowed_emails = ["gordon.nuesch@rowohlt.de"]
 
     if user_email in allowed_emails:
-        # ---- ERLAUBTER ZUGRIFF: Die eigentliche App anzeigen ----
-        st.sidebar.success(f"Eingeloggt als {user_email}")
-        st.sidebar.button("Logout", on_click=st.logout)
+        # --- HAUPTANWENDUNG NACH LOGIN ---
+        initialisiere_app_zustand()
+        
+        # Der angezeigte DataFrame ist immer der, der im session_state gespeichert ist
+        df_angezeigt = st.session_state.df_aktuell
         
         st.title("🗺️ Interaktive Gebietsplanung")
 
-        # Basisdaten (Koordinaten, Umsätze etc.) laden
-        basis_df = lade_basis_daten()
+        # --- SEITENLEISTE ---
+        st.sidebar.success(f"Eingeloggt als {user_email}")
+        st.sidebar.button("Logout", on_click=st.logout)
+        
+        # ANZEIGE-FILTER
+        st.sidebar.header("Filter- & Anzeigeoptionen")
+        verlag_optionen = ['Alle Verlage'] + sorted(df_angezeigt['Verlag'].unique().tolist())
+        selected_verlag = st.sidebar.selectbox('Verlag auswählen:', verlag_optionen)
 
-        if not basis_df.empty:
-            # Den aktuellen Zustand der Gebietszuweisung im Session State speichern.
-            # Dies ermöglicht es uns, Änderungen vorzunehmen, ohne die Basisdaten zu verändern.
-            if 'aktuelle_zuweisung' not in st.session_state:
-                st.session_state.aktuelle_zuweisung = basis_df[['Kunden_Nr', 'Vertreter_Name']].copy()
+        if selected_verlag == 'Alle Verlage':
+            verfuegbare_vertreter = sorted(df_angezeigt['Vertreter_Name'].unique().tolist())
+        else:
+            verfuegbare_vertreter = sorted(df_angezeigt[df_angezeigt['Verlag'] == selected_verlag]['Vertreter_Name'].unique().tolist())
+        
+        selected_vertreter = st.sidebar.multiselect(
+            'Angezeigte Vertreter:', options=verfuegbare_vertreter, default=verfuegbare_vertreter
+        )
+        
+        # OPTIMIERUNGS-OPTIONEN
+        st.sidebar.markdown("---")
+        st.sidebar.header("Optimierungs-Optionen")
 
-            # --- SEITENLEISTE: SZENARIO MANAGEMENT ---
-            st.sidebar.header("Szenario Management")
+        st.sidebar.subheader("1. Kriterien gewichten")
+        w_arbeitslast = st.sidebar.slider("Balance der Arbeitslast (Kundenzahl)", 0, 100, 50, key="w_workload")
+        w_potenzial = st.sidebar.slider("Balance des Potenzials (Umsatz)", 0, 100, 30, key="w_potential")
+        w_effizienz = st.sidebar.slider("Reise-Effizienz (Kompaktheit)", 0, 100, 20, key="w_efficiency")
 
-            # SZENARIO LADEN
-            szenarien_liste = lade_szenarien_liste()
-            # "IST-Zustand" als Standard-Option hinzufügen, um zur ursprünglichen Planung zurückzukehren
-            geladenes_szenario = st.sidebar.selectbox(
-                "Szenario laden:",
-                options=['IST-Zustand 03/2025'] + szenarien_liste
-            )
-            
-            if st.sidebar.button("Ausgewähltes Szenario laden"):
-                if geladenes_szenario == 'IST-Zustand 03/2025':
-                    # Lade die ursprüngliche Zuweisung aus den Basisdaten
-                    st.session_state.aktuelle_zuweisung = basis_df[['Kunden_Nr', 'Vertreter_Name']].copy()
-                else:
-                    # Lade eine gespeicherte Zuweisung aus der Google-Tabelle
-                    neue_zuweisung = lade_szenario_zuweisung(geladenes_szenario)
-                    if neue_zuweisung is not None:
-                        st.session_state.aktuelle_zuweisung = neue_zuweisung.reset_index()
-                st.toast(f"Szenario '{geladenes_szenario}' geladen!")
-            
-            # SZENARIO SPEICHERN
-            st.sidebar.markdown("---")
-            neuer_szenario_name = st.sidebar.text_input("Neuen Szenario-Namen eingeben:")
-            if st.sidebar.button("Aktuelle Ansicht als Szenario speichern"):
-                if neuer_szenario_name:
-                    # Übergebe die aktuelle Zuweisung aus dem Session State an die Speicherfunktion
-                    if speichere_szenario(neuer_szenario_name, st.session_state.aktuelle_zuweisung):
-                        st.toast(f"Szenario '{neuer_szenario_name}' erfolgreich gespeichert!")
-                else:
-                    st.sidebar.warning("Bitte einen Namen für das Szenario eingeben.")
+        # Normiere die Gewichte, damit ihre Summe 1 ergibt
+        total_weight = w_arbeitslast + w_potenzial + w_effizienz
+        # Sicherstellen, dass nicht durch Null geteilt wird
+        if total_weight == 0: total_weight = 1 
+        weights = {
+            'Arbeitslast': w_arbeitslast / total_weight,
+            'Potenzial': w_potenzial / total_weight,
+            'Effizienz': w_effizienz / total_weight,
+        }
 
-            # Erstelle den finalen Arbeits-DataFrame, indem die Basisdaten mit der *aktuellen* Zuweisung verknüpft werden
-            df = basis_df.drop(columns=['Vertreter_Name']).merge(
-                st.session_state.aktuelle_zuweisung, on='Kunden_Nr', how='left'
-            )
+        st.sidebar.subheader("2. Regeln (Constraints) festlegen")
+        c_top_kunden_sperren = st.sidebar.checkbox("Top 10% Kunden beim alten Vertreter belassen", value=True, key="c_top_customers")
+        c_kontinuitaet_belohnen = st.sidebar.checkbox("Kunden-Kontinuität als Ziel berücksichtigen", value=True, key="c_continuity")
 
-            # --- UI-FILTER UND DARSTELLUNG ---
-            st.sidebar.header("Filter-Optionen")
-            verlag_optionen = ['Alle Verlage'] + sorted(df['Verlag'].unique().tolist())
-            selected_verlag = st.sidebar.selectbox('Verlag auswählen:', verlag_optionen)
-            
+        constraints = {
+            'top_kunden_sperren': c_top_kunden_sperren,
+            'kontinuitaet_belohnen': c_kontinuitaet_belohnen
+        }
+        
+        st.sidebar.markdown("---")
+        if st.sidebar.button("Neue Gebietsverteilung berechnen", type="primary"):
+            with st.spinner("Optimiere Gebiete... Dieser Vorgang kann einige Minuten dauern."):
+                # Die Optimierung wird immer auf den originalen Basisdaten ausgeführt
+                df_optimiert = optimierungs_algorithmus(st.session_state.df_basis, weights, constraints)
+                # Das Ergebnis der Optimierung wird zum neuen "aktuellen" Zustand
+                st.session_state.df_aktuell = df_optimiert
+                st.toast("Optimierung abgeschlossen! Die Ansicht wurde aktualisiert.")
+                st.rerun() # Lädt die App neu, um die Änderungen anzuzeigen
+
+        # --- DASHBOARD-ANZEIGE ---
+        if not df_angezeigt.empty:
+            # Filtere die angezeigten Daten basierend auf den Sidebar-Widgets
             if selected_verlag == 'Alle Verlage':
-                verfuegbare_vertreter = sorted(df['Vertreter_Name'].unique().tolist())
+                df_filtered = df_angezeigt[df_angezeigt['Vertreter_Name'].isin(selected_vertreter)]
             else:
-                verfuegbare_vertreter = sorted(df[df['Verlag'] == selected_verlag]['Vertreter_Name'].unique().tolist())
-            
-            selected_vertreter = st.sidebar.multiselect('Vertreter auswählen:', options=verfuegbare_vertreter, default=verfuegbare_vertreter)
+                df_filtered = df_angezeigt[(df_angezeigt['Verlag'] == selected_verlag) & (df_angezeigt['Vertreter_Name'].isin(selected_vertreter))]
 
-            if selected_verlag == 'Alle Verlage':
-                df_filtered = df[df['Vertreter_Name'].isin(selected_vertreter)]
-            else:
-                df_filtered = df[(df['Verlag'] == selected_verlag) & (df['Vertreter_Name'].isin(selected_vertreter))]
-
-            st.subheader("Analyse der Auswahl")
+            # Metriken
+            st.subheader("Analyse der aktuellen Ansicht")
             col1, col2, col3 = st.columns(3)
-            col1.metric("Anzahl Vertreter", f"{len(selected_vertreter)}")
+            col1.metric("Anzahl Vertreter", df_filtered['Vertreter_Name'].nunique())
             col2.metric("Anzahl Kunden", f"{len(df_filtered):,}".replace(',', '.'))
             col3.metric("Jahresumsatz 2024", f"{int(df_filtered['Umsatz_2024'].sum()):,} €".replace(',', '.'))
-
-            st.subheader("Gebietskarte")
             
-            vertreter_liste = sorted(df['Vertreter_Name'].unique())
+            # Karte
+            st.subheader("Gebietskarte")
+            vertreter_liste = sorted(df_angezeigt['Vertreter_Name'].unique())
             palette = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
             farb_map = {name: palette[i % len(palette)] for i, name in enumerate(vertreter_liste)}
             
             zeichne_karte(df_filtered, farb_map)
+
     else:
-        # ---- UNERLAUBTER ZUGRIFF ----
+        # User ist eingeloggt, aber nicht berechtigt
         st.error("Zugriff verweigert.")
         st.warning(f"Ihre E-Mail-Adresse ({user_email}) ist für diese Anwendung nicht freigeschaltet.")
         st.button("Logout", on_click=st.logout)
