@@ -7,3 +7,4 @@ scipy
 streamlit-folium
 gspread
 google-auth-oauthlib
+tqdm
