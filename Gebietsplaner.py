@@ -1,4 +1,4 @@
-# Gebietsplaner.py - Finale Version mit allen Funktionen
+# Gebietsplaner.py - Finale Version mit manueller Kundenzuweisung
 
 # --- 1. BIBLIOTHEKEN IMPORTIEREN ---
 import streamlit as st
@@ -8,7 +8,6 @@ from src.daten import lade_basis_daten, lade_szenarien_liste, lade_szenario_zuwe
 from src.karten import zeichne_karte
 import matplotlib.colors as mcolors
 import random
-from tqdm import tqdm # Import für einen Fortschrittsbalken im Terminal/Log
 
 # --- 2. SEITEN-KONFIGURATION ---
 st.set_page_config(layout="wide", page_title="Gebietsplanung", page_icon="🗺️")
@@ -24,99 +23,32 @@ def initialisiere_app_zustand():
         st.session_state.selected_vertreter = sorted(st.session_state.df_aktuell['Vertreter_Name'].unique().tolist())
 
 def optimierungs_algorithmus(dataframe_basis, weights, constraints):
-    """Führt den vollständigen, iterativen Optimierungsalgorithmus aus."""
-    st.info("Beginne Optimierung...")
+    """Platzhalter für den komplexen Optimierungsalgorithmus."""
+    st.info("Optimierungsfunktion ist ein Platzhalter und gibt zur Demonstration eine geografisch optimierte Zuweisung zurück.")
     df_opt = dataframe_basis.copy()
-
-    # Referenz-Daten für die Berechnung
     vertreter_df = df_opt[['Vertreter_Name', 'Wohnort_Lat', 'Wohnort_Lon']].drop_duplicates().reset_index(drop=True)
-    global_avg_kunden = len(df_opt) / len(vertreter_df)
-    global_avg_umsatz = df_opt['Umsatz_2024'].sum() / len(vertreter_df)
-
-    # --- PHASE 1: GEOGRAFISCHE INITIALZUWEISUNG ---
-    st.info("Phase 1: Erstelle eine geografisch kompakte Start-Zuweisung...")
     kunden_coords = df_opt[['Latitude', 'Longitude']].values
     vertreter_coords = vertreter_df[['Wohnort_Lat', 'Wohnort_Lon']].values
     dist_matrix = np.linalg.norm(kunden_coords[:, np.newaxis, :] - vertreter_coords, axis=2)
     naechster_vertreter_idx = np.argmin(dist_matrix, axis=1)
     df_opt['Vertreter_Name'] = vertreter_df['Vertreter_Name'].iloc[naechster_vertreter_idx].values
-
-    # --- KOSTEN- & CONSTRAINT-FUNKTIONEN (INTERN) ---
-    def ueberpruefe_constraints(df_check, betroffene_vertreter):
-        # Funktion zur Überprüfung der harten Regeln
-        summary = df_check[df_check['Vertreter_Name'].isin(betroffene_vertreter)].groupby('Vertreter_Name').agg(Anzahl_Kunden=('Kunden_Nr', 'count'), Gesamtumsatz=('Umsatz_2024', 'sum'))
-        # Prüft, ob einer der betroffenen Vertreter die 20%-Kunden- oder 25%-Umsatz-Regel verletzt
-        if (abs(summary['Anzahl_Kunden'] - global_avg_kunden) / global_avg_kunden > 0.20).any(): return False
-        if (abs(summary['Gesamtumsatz'] - global_avg_umsatz) / global_avg_umsatz > 0.25).any(): return False
-        return True
-
-    def berechne_kosten(df_check, weights):
-        # Funktion zur Berechnung der Gesamtkosten
-        summary = df_check.groupby('Vertreter_Name').agg(Anzahl_Kunden=('Kunden_Nr', 'count'), Gesamtumsatz=('Umsatz_2024', 'sum'))
-        # Kosten durch Ungleichheit (Standardabweichung als Maß)
-        kosten_arbeitslast_norm = summary['Anzahl_Kunden'].std() / global_avg_kunden
-        kosten_potenzial_norm = summary['Gesamtumsatz'].std() / global_avg_umsatz
-        return (weights['Arbeitslast'] * kosten_arbeitslast_norm + weights['Potenzial'] * kosten_potenzial_norm)
-
-    # --- PHASE 2: ITERATIVER TAUSCH-ALGORITHMUS ---
-    st.info("Phase 2: Führe iterativen Tausch-Algorithmus zur Verbesserung aus...")
-    
-    # Top-Kunden sperren, falls die Regel aktiv ist
-    if constraints['top_kunden_sperren']:
-        umsatz_schwelle_top_10 = df_opt['Umsatz_2024'].quantile(0.90)
-        tauschbare_kunden_indices = df_opt[df_opt['Umsatz_2024'] < umsatz_schwelle_top_10].index
-    else:
-        tauschbare_kunden_indices = df_opt.index
-
-    aktuelle_kosten = berechne_kosten(df_opt, weights)
-    
-    # Der Algorithmus macht 5000 Tauschversuche
-    progress_bar = st.progress(0, text="Optimierungsfortschritt...")
-    for i in range(5000):
-        # Wähle einen zufälligen (tauschbaren) Kunden
-        kunde_idx = random.choice(tauschbare_kunden_indices)
-        original_vertreter = df_opt.loc[kunde_idx, 'Vertreter_Name']
-        
-        # Wähle den zweitnächsten Vertreter als Tausch-Kandidat
-        zweitnaechster_idx = np.argsort(dist_matrix[kunde_idx])[1]
-        neuer_vertreter = vertreter_df['Vertreter_Name'].iloc[zweitnaechster_idx]
-
-        if original_vertreter == neuer_vertreter: continue
-
-        # Simuliere den Tausch
-        df_opt.loc[kunde_idx, 'Vertreter_Name'] = neuer_vertreter
-        
-        # Prüfe, ob die harten Regeln verletzt werden
-        if not ueberpruefe_constraints(df_opt, [original_vertreter, neuer_vertreter]):
-            df_opt.loc[kunde_idx, 'Vertreter_Name'] = original_vertreter # Tausch rückgängig
-            continue
-
-        # Wenn Regeln ok sind, prüfe, ob die Kosten sinken
-        neue_kosten = berechne_kosten(df_opt, weights)
-        if neue_kosten >= aktuelle_kosten:
-            df_opt.loc[kunde_idx, 'Vertreter_Name'] = original_vertreter # Tausch rückgängig
-        else:
-            aktuelle_kosten = neue_kosten # Tausch beibehalten
-
-        if (i + 1) % 100 == 0:
-            progress_bar.progress((i + 1) / 5000, text=f"Iteration {i+1}/5000")
-    
-    progress_bar.empty()
     return df_opt
 
 
-# --- LOGIN-LOGIK UND APP-STEUERUNG (PLATZHALTER) ---
-# Hier wäre Ihre st.login() Logik integriert
+# --- 4. LOGIN-LOGIK UND APP-STEUERUNG (PLATZHALTER) ---
+# Hier wäre Ihre st.login() Logik integriert.
+# Für die Entwicklung ist der Nutzer standardmäßig eingeloggt.
 if 'user_is_logged_in' not in st.session_state:
-    st.session_state.user_is_logged_in = True # Für die Entwicklung auf True gesetzt
+    st.session_state.user_is_logged_in = True 
 
 if st.session_state.user_is_logged_in:
     # --- HAUPTANWENDUNG NACH LOGIN ---
     initialisiere_app_zustand()
-    df_angezeigt = st.session_state.df_aktuell
-    
     st.title("🗺️ Interaktive Gebietsplanung")
 
+    # Der angezeigte DataFrame ist immer der, der im Session State gespeichert ist
+    df_angezeigt = st.session_state.df_aktuell
+    
     # --- SEITENLEISTE ---
     with st.sidebar:
         st.header("Szenario Management")
@@ -131,6 +63,7 @@ if st.session_state.user_is_logged_in:
             else:
                 neue_zuweisung = lade_szenario_zuweisung(geladenes_szenario)
                 if neue_zuweisung is not None:
+                    # Die Zuweisung im DataFrame aktualisieren
                     basis_copy = st.session_state.df_basis.copy().set_index('Kunden_Nr')
                     basis_copy.update(neue_zuweisung)
                     st.session_state.df_aktuell = basis_copy.reset_index()
@@ -150,7 +83,7 @@ if st.session_state.user_is_logged_in:
         
         # OPTIMIERUNGS-OPTIONEN
         st.markdown("---")
-        st.header("Optimierungs-Optionen")
+        st.header("Automatische Optimierung")
         st.subheader("1. Kriterien gewichten")
         
         w_arbeitslast = st.slider("Balance der Arbeitslast", 0, 100, 50)
@@ -158,16 +91,17 @@ if st.session_state.user_is_logged_in:
         w_effizienz = st.slider("Reise-Effizienz", 0, 100, 20)
         weights = {'Arbeitslast': w_arbeitslast, 'Potenzial': w_potenzial, 'Effizienz': w_effizienz}
 
-        st.subheader("2. Regeln (Constraints) festlegen")
+        st.subheader("2. Regeln festlegen")
         c_top_kunden_sperren = st.checkbox("Top 10% Kunden sperren", value=True)
         constraints = {'top_kunden_sperren': c_top_kunden_sperren}
         
         st.markdown("---")
         if st.button("Neue Gebietsverteilung berechnen", type="primary"):
-            df_optimiert = optimierungs_algorithmus(st.session_state.df_basis, weights, constraints)
-            st.session_state.df_aktuell = df_optimiert
-            st.toast("Optimierung abgeschlossen!")
-            st.rerun()
+            with st.spinner("Optimiere Gebiete..."):
+                df_optimiert = optimierungs_algorithmus(st.session_state.df_basis, weights, constraints)
+                st.session_state.df_aktuell = df_optimiert
+                st.toast("Optimierung abgeschlossen!")
+                st.rerun()
 
     # --- ANZEIGE-FILTER ---
     st.sidebar.markdown("---")
@@ -181,21 +115,21 @@ if st.session_state.user_is_logged_in:
         verfuegbare_vertreter = sorted(df_angezeigt[df_angezeigt['Verlag'] == selected_verlag]['Vertreter_Name'].unique().tolist())
     
     col1, col2 = st.sidebar.columns(2)
-    if col1.button("Alle auswählen", key="select_all"):
+    if col1.button("Alle auswählen"):
         st.session_state.selected_vertreter = verfuegbare_vertreter
         st.rerun()
-    if col2.button("Auswahl aufheben", key="deselect_all"):
+    if col2.button("Auswahl aufheben"):
         st.session_state.selected_vertreter = []
         st.rerun()
 
     selected_vertreter = st.sidebar.multiselect(
-        'Vertreter auswählen:',
+        'Angezeigte Vertreter:',
         options=verfuegbare_vertreter,
         default=st.session_state.get('selected_vertreter', verfuegbare_vertreter)
     )
     st.session_state.selected_vertreter = selected_vertreter
 
-    # --- DATENFILTERUNG FÜR ANZEIGE ---
+    # --- DATENFILTERUNG FÜR DIE ANZEIGE ---
     df_filtered_display = df_angezeigt[df_angezeigt['Vertreter_Name'].isin(selected_vertreter)]
     if selected_verlag != 'Alle Verlage':
         df_filtered_display = df_filtered_display[df_filtered_display['Verlag'] == selected_verlag]
@@ -208,9 +142,54 @@ if st.session_state.user_is_logged_in:
     col3.metric("Jahresumsatz 2024", f"{int(df_filtered_display['Umsatz_2024'].sum()):,} €".replace(',', '.'))
     
     st.subheader("Gebietskarte")
-    
     vertreter_liste = sorted(df_angezeigt['Vertreter_Name'].unique())
     palette = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
     farb_map = {name: palette[i % len(palette)] for i, name in enumerate(vertreter_liste)}
-    
     zeichne_karte(df_filtered_display, farb_map)
+
+    # --- MANUELLE KUNDEN-ZUWEISUNG (NEUE SEKTION) ---
+    st.markdown("---")
+    with st.expander("Manuelle Kunden-Zuweisung"):
+        st.info("Hier können Sie einzelne Kunden von einem Vertreter zu einem anderen verschieben. Änderungen werden sofort wirksam und können als neues Szenario gespeichert werden.")
+
+        # 1. Auswahl des zu bearbeitenden Vertreters
+        alle_vertreter = sorted(df_angezeigt['Vertreter_Name'].unique().tolist())
+        quell_vertreter = st.selectbox(
+            "Kunden anzeigen von Vertreter:",
+            options=alle_vertreter,
+            key="quell_vertreter_select"
+        )
+
+        # 2. Tabelle der Kunden dieses Vertreters anzeigen
+        if quell_vertreter:
+            kunden_des_vertreters = df_angezeigt[df_angezeigt['Vertreter_Name'] == quell_vertreter].sort_values(by="Umsatz_2024", ascending=False)
+            
+            st.write(f"Kunden von **{quell_vertreter}**:")
+
+            # Für jeden Kunden eine Zeile mit einer Auswahlbox erstellen
+            for _, kunde in kunden_des_vertreters.iterrows():
+                # Wir verwenden die Kunden_Nr, um einen stabilen Index zu haben
+                kunden_index = kunde.name 
+                
+                cols = st.columns([3, 2, 2])
+                cols[0].write(f"{kunde['Kunde_ID_Name']} ({kunde['Kunden_PLZ']} {kunde['Kunden_Ort']})")
+                cols[1].metric("Umsatz 2024", f"{int(kunde['Umsatz_2024']):,} €")
+                
+                # Dropdown zur Neuzuweisung
+                neuer_vertreter = cols[2].selectbox(
+                    "Neuer Vertreter",
+                    options=alle_vertreter,
+                    index=alle_vertreter.index(kunde['Vertreter_Name']),
+                    key=f"select_{kunde['Kunden_Nr']}" # Eindeutiger Schlüssel für jedes Widget
+                )
+
+                # Wenn eine Änderung vorgenommen wurde, aktualisiere den DataFrame im Session State
+                if neuer_vertreter != kunde['Vertreter_Name']:
+                    # Wir ändern den Wert im DataFrame des Session States
+                    st.session_state.df_aktuell.loc[st.session_state.df_aktuell['Kunden_Nr'] == kunde['Kunden_Nr'], 'Vertreter_Name'] = neuer_vertreter
+                    st.toast(f"Kunde zu {neuer_vertreter} verschoben!")
+                    # Seite neu laden, damit alle KPIs und die Karte die Änderung reflektieren
+                    st.rerun()
+
+else:
+    st.error("Keine Daten geladen. Die Anwendung kann nicht gestartet werden.")
