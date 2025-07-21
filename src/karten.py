@@ -5,10 +5,15 @@ import folium
 from scipy.spatial import ConvexHull
 import pandas as pd
 
-def zeichne_karte(dataframe, farb_map):
+def zeichne_karte(dataframe, farb_map, selected_customer_id=None):
     """
     Erstellt ein interaktives Folium-Kartenobjekt, ohne es anzuzeigen.
     Gibt das Kartenobjekt zur weiteren Verwendung zurück.
+    
+    Args:
+        dataframe: DataFrame mit Kundendaten
+        farb_map: Dictionary mit Vertreter-Farben
+        selected_customer_id: ID des aktuell ausgewählten Kunden (optional)
     """
     # Karte initialisieren
     karte = folium.Map(location=[51.1657, 10.4515], zoom_start=6, tiles="cartodbpositron")
@@ -29,7 +34,7 @@ def zeichne_karte(dataframe, farb_map):
                     fill=True,
                     fill_color=farb_map.get(vertreter_name, 'gray'),
                     fill_opacity=0.2,
-                    popup=vertreter_name
+                    popup=f"<b>Gebiet: {vertreter_name}</b><br>Kunden: {len(vertreter_daten)}"
                 ).add_to(karte)
             except Exception:
                 pass
@@ -40,21 +45,41 @@ def zeichne_karte(dataframe, farb_map):
         if pd.notna(wohnort_lat):
             folium.Marker(
                 [wohnort_lat, wohnort_lon],
-                popup=f"Zentrum: {vertreter_name}",
-                icon=folium.Icon(color='black', icon_color='white', icon='star')
+                popup=f"<b>🏠 Zentrum: {vertreter_name}</b><br>Kunden: {len(vertreter_daten)}",
+                icon=folium.Icon(color='black', icon_color='white', icon='star', prefix='fa')
             ).add_to(karte)
 
     # Kundenpunkte hinzufügen
     for _, row in dataframe.iterrows():
-        # WICHTIG: Wir fügen eine ID zum Popup hinzu, um den Kunden zu identifizieren
-        popup_html = f"ID:{row['Kunden_Nr']}<br><b>{row['Kunde_ID_Name']}</b><br>Vertreter: {row['Vertreter_Name']}"
+        is_selected = row['Kunden_Nr'] == selected_customer_id
+        
+        # Vereinfachte Popup-Informationen für bessere Klick-Erkennung
+        popup_html = f"ID:{row['Kunden_Nr']}<br><b>{row['Kunde_ID_Name']}</b><br>Vertreter: {row['Vertreter_Name']}<br>Umsatz: {int(row['Umsatz_2024']):,} €<br><small>👆 Klicken zum Auswählen</small>"
+        
+        # Bestimme Größe und Farbe basierend auf Auswahl
+        if is_selected:
+            radius = 15  # Größer für ausgewählte Kunden
+            color = 'red'
+            weight = 4
+            fill_opacity = 1.0
+        else:
+            radius = 10  # Größer für bessere Klickbarkeit
+            color = farb_map.get(row['Vertreter_Name'], 'gray')
+            weight = 2
+            fill_opacity = 0.8
+        
         folium.CircleMarker(
             location=[row['Latitude'], row['Longitude']],
-            radius=5, # Etwas größer für leichtere Klickbarkeit
+            radius=radius,
             popup=popup_html,
-            color=farb_map.get(row['Vertreter_Name']),
+            color=color,
+            weight=weight,
             fill=True,
-            fill_opacity=0.9
+            fill_color=color,
+            fill_opacity=fill_opacity,
+            tooltip=f"Kunde {row['Kunden_Nr']}: {row['Kunde_ID_Name']}",
+            # Füge data-Attribut für einfachere Extraktion hinzu
+            popup_props={'data-customer-id': str(row['Kunden_Nr'])}
         ).add_to(karte)
         
     return karte

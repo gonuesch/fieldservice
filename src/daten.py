@@ -7,7 +7,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # Diese Funktion bleibt, um die Basisdaten zu laden
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=7200)  # 2 Stunden Cache für bessere Performance
 def lade_basis_daten():
     """Lädt die initialen Kunden- und Vertreterdaten."""
     try:
@@ -23,10 +23,20 @@ def lade_basis_daten():
         vertreter_df = pd.DataFrame(vertreter_sheet.get_all_records())
 
         df_merged = pd.merge(kunden_df, vertreter_df, on='Vertreter_Name', how='left')
-        for col in ['Latitude', 'Longitude', 'Wohnort_Lat', 'Wohnort_Lon', 'Umsatz_2024', 'Kunden_Nr']:
-            df_merged[col] = pd.to_numeric(df_merged[col].replace('', np.nan), errors='coerce')
         
+        # Optimierte Datenverarbeitung
+        numeric_columns = ['Latitude', 'Longitude', 'Wohnort_Lat', 'Wohnort_Lon', 'Umsatz_2024', 'Kunden_Nr']
+        for col in numeric_columns:
+            if col in df_merged.columns:
+                df_merged[col] = pd.to_numeric(df_merged[col].replace('', np.nan), errors='coerce')
+        
+        # Entferne Zeilen ohne Koordinaten
         df_merged.dropna(subset=['Latitude', 'Longitude', 'Wohnort_Lat', 'Wohnort_Lon'], inplace=True)
+        
+        # Sortiere für bessere Performance
+        df_merged.sort_values('Kunden_Nr', inplace=True)
+        df_merged.reset_index(drop=True, inplace=True)
+        
         return df_merged
         
     except Exception as e:
@@ -43,7 +53,7 @@ def hole_szenarien_sheet():
     gc = gspread.authorize(creds)
     return gc.open("gebietsplaner_szenarien").sheet1
 
-@st.cache_data(ttl=60) # Kürzerer Cache, da sich die Liste ändern kann
+@st.cache_data(ttl=600) # 10 Minuten Cache für Szenarien-Liste
 def lade_szenarien_liste():
     """Lädt die Liste aller einzigartigen Szenario-Namen."""
     try:
