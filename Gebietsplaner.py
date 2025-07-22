@@ -109,20 +109,7 @@ def initialisiere_app_zustand():
             st.session_state.app_initialisiert = False
             return
 
-def optimierungs_algorithmus(dataframe_basis, weights, constraints):
-    """
-    Platzhalter für den komplexen Optimierungsalgorithmus.
-    In einer finalen Version würde hier die iterative Tausch-Logik implementiert.
-    """
-    st.info("Optimierungsfunktion ist ein Platzhalter und gibt zur Demonstration eine geografisch optimierte Zuweisung zurück.")
-    df_opt = dataframe_basis.copy()
-    vertreter_df = df_opt[['Vertreter_Name', 'Wohnort_Lat', 'Wohnort_Lon']].drop_duplicates().reset_index(drop=True)
-    kunden_coords = df_opt[['Latitude', 'Longitude']].values
-    vertreter_coords = vertreter_df[['Wohnort_Lat', 'Wohnort_Lon']].values
-    dist_matrix = np.linalg.norm(kunden_coords[:, np.newaxis, :] - vertreter_coords, axis=2)
-    naechster_vertreter_idx = np.argmin(dist_matrix, axis=1)
-    df_opt['Vertreter_Name'] = vertreter_df['Vertreter_Name'].iloc[naechster_vertreter_idx].values
-    return df_opt
+
 
 def kunde_zuweisen(kunden_id, neuer_vertreter):
     """
@@ -257,9 +244,7 @@ if st.session_state.user_is_logged_in:
             else:
                 st.warning("Bitte einen Namen für das Szenario eingeben.")
         
-        st.markdown("---")
-        st.header("Automatische Optimierung")
-        # (Hier könnte der Code für die Optimierungs-Slider stehen)
+
 
     # --- DATENFILTERUNG FÜR DIE ANZEIGE ---
     st.sidebar.markdown("---")
