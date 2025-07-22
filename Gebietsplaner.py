@@ -303,6 +303,8 @@ if st.session_state.user_is_logged_in:
             # Finde die Daten des ausgewählten Kunden
             selected_customer_data = df[df['Kunden_Nr'] == st.session_state.selected_customer_id].iloc[0]
             
+
+            
             # Schönes Fenster mit Container und Border
             st.markdown("""
             <div style="
@@ -388,12 +390,16 @@ if st.session_state.user_is_logged_in:
     
     st.subheader("Gebietskarte")
     
-    # OPTIMIERT: Karte nur neu rendern wenn sich Daten WIRKLICH geändert haben
-    current_data_hash = hash(str(df_filtered_display[['Kunden_Nr', 'Vertreter_Name']].values.tobytes()))
+
     
-    # Nur neu rendern wenn sich Daten geändert haben (nicht bei Kundenauswahl!)
+    # OPTIMIERT: Karte neu rendern wenn sich Daten oder Kundenauswahl geändert haben
+    current_data_hash = hash(str(df_filtered_display[['Kunden_Nr', 'Vertreter_Name']].values.tobytes()))
+    current_selection_hash = hash(str(st.session_state.selected_customer_id))
+    combined_hash = hash(str(current_data_hash) + str(current_selection_hash))
+    
+    # Neu rendern wenn sich Daten oder Kundenauswahl geändert haben
     if ('last_karte_data_hash' not in st.session_state or 
-        st.session_state.last_karte_data_hash != current_data_hash):
+        st.session_state.last_karte_data_hash != combined_hash):
         
         vertreter_liste = sorted(df['Vertreter_Name'].unique())
         palette = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
@@ -402,27 +408,54 @@ if st.session_state.user_is_logged_in:
         karte_obj = zeichne_karte(df_filtered_display, farb_map, st.session_state.selected_customer_id)
         
         # Speichere aktuelle Daten für nächsten Vergleich
-        st.session_state.last_karte_data_hash = current_data_hash
+        st.session_state.last_karte_data_hash = combined_hash
         st.session_state.cached_karte = karte_obj
     else:
-        # Verwende gecachte Karte, aber aktualisiere selected_customer_id
+        # Verwende gecachte Karte
         karte_obj = st.session_state.cached_karte
-        # Aktualisiere nur die Marker-Farben für den ausgewählten Kunden
-        if st.session_state.selected_customer_id:
-            # Hier könnten wir die Marker-Farben dynamisch ändern
-            pass
 
     # Karten-Interaktion für Kundenauswahl
-    map_data = st_folium(karte_obj, width='100%', height=700, returned_objects=['last_object_clicked_popup'])
+    map_data = st_folium(
+        karte_obj, 
+        width='100%', 
+        height=700, 
+        returned_objects=['last_object_clicked_popup'],
+        key=f"map_{st.session_state.selected_customer_id}"  # Unique key für bessere Interaktion
+    )
 
-    # OPTIMIERT: Kundenauswahl über Suchfeld (oben) - OHNE st.rerun()
+    # OPTIMIERT: Kundenauswahl über Suchfeld und Dropdown
     if len(df_filtered_display) > 0:
-        # Suchfeld für Kunden
-        search_term = st.text_input(
-            "🔍 Kunde suchen (ID oder Name):",
-            placeholder="z.B. 1037090 oder Scheller",
-            key="kunde_search"
-        )
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            # Suchfeld für Kunden
+            search_term = st.text_input(
+                "🔍 Kunde suchen (ID oder Name):",
+                placeholder="z.B. 1037090 oder Scheller",
+                key="kunde_search"
+            )
+        
+        with col2:
+            # Direkte Dropdown-Auswahl als Alternative
+            kunden_options = [f"{row['Kunden_Nr']} - {row['Kunde_ID_Name'][:30]}..." 
+                             for _, row in df_filtered_display.head(20).iterrows()]
+            kunden_options.insert(0, "Kunde aus Dropdown auswählen...")
+            
+            selected_kunde_option = st.selectbox(
+                "📋 Oder direkt auswählen:",
+                options=kunden_options,
+                key="kunde_dropdown"
+            )
+            
+            if selected_kunde_option != "Kunde aus Dropdown auswählen...":
+                try:
+                    selected_id = int(selected_kunde_option.split(" - ")[0])
+                    if st.session_state.selected_customer_id != selected_id:
+                        st.session_state.selected_customer_id = selected_id
+                        st.toast(f"✅ Kunde {selected_id} ausgewählt!")
+                        st.rerun()
+                except:
+                    pass
         
         # Filtere Kunden basierend auf Suchbegriff
         if search_term:
@@ -436,8 +469,9 @@ if st.session_state.user_is_logged_in:
         # Entferne Duplikate basierend auf Kunden_Nr
         filtered_customers = filtered_customers.drop_duplicates(subset=['Kunden_Nr']).reset_index(drop=True)
         
-        # Zeige gefilterte Kunden als Buttons - OHNE st.rerun()
+        # Zeige gefilterte Kunden als Buttons
         if len(filtered_customers) > 0:
+            st.markdown("**🔍 Gefundene Kunden:**")
             cols = st.columns(min(5, len(filtered_customers)))
             for idx, (_, kunde) in enumerate(filtered_customers.iterrows()):
                 col_idx = idx % 5
@@ -449,13 +483,13 @@ if st.session_state.user_is_logged_in:
                     ):
                         st.session_state.selected_customer_id = kunde['Kunden_Nr']
                         st.toast(f"✅ Kunde {kunde['Kunden_Nr']} ausgewählt!")
-                        # ❌ KEIN st.rerun() mehr - Dialog erscheint sofort!
+                        st.rerun()  # Wichtig: Rerun für sofortige Anzeige des Dialogs
         else:
             st.info("Keine Kunden gefunden.")
     else:
         st.info("Keine Kunden zum Anzeigen verfügbar.")
     
-    # OPTIMIERT: Karten-Klick-Interaktion - OHNE st.rerun()
+    # OPTIMIERT: Karten-Klick-Interaktion
     if map_data and map_data.get("last_object_clicked_popup"):
         popup_text = map_data["last_object_clicked_popup"]
         
@@ -471,7 +505,7 @@ if st.session_state.user_is_logged_in:
                         if st.session_state.selected_customer_id != clicked_id:
                             st.session_state.selected_customer_id = clicked_id
                             st.toast(f"✅ Kunde {clicked_id} ausgewählt!")
-                            # ❌ KEIN st.rerun() mehr - Dialog erscheint sofort!
+                            st.rerun()  # Wichtig: Rerun für sofortige Anzeige des Dialogs
                         break
         except (ValueError, IndexError, AttributeError):
             pass

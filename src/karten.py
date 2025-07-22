@@ -55,7 +55,7 @@ def zeichne_karte(dataframe, farb_map, selected_customer_id=None):
         is_selected = row['Kunden_Nr'] == selected_customer_id
         
         # Vereinfachte Popup-Informationen für bessere Klick-Erkennung
-        popup_html = f"ID:{row['Kunden_Nr']}<br><b>{row['Kunde_ID_Name']}</b><br>Vertreter: {row['Vertreter_Name']}<br>Umsatz: {int(row['Umsatz_2024']):,} €<br><small>👆 Klicken zum Auswählen</small>"
+        popup_html = f"ID: {row['Kunden_Nr']}<br><b>{row['Kunde_ID_Name']}</b><br>Vertreter: {row['Vertreter_Name']}<br>Umsatz: {int(row['Umsatz_2024']):,} €<br><small>👆 Klicken zum Auswählen</small>"
         
         # Bestimme Größe und Farbe basierend auf Auswahl
         if is_selected:
