@@ -331,7 +331,7 @@ if st.session_state.user_is_logged_in:
                         if kunde_zuweisen(st.session_state.selected_customer_id, neuer_vertreter):
                             st.toast(f"✅ Kunde erfolgreich zu {neuer_vertreter} verschoben!")
                             st.session_state.selected_customer_id = None
-                            # Kein st.rerun() - Update erfolgt automatisch
+                            st.rerun()  # UI-Update für Karten-Änderung
                         else:
                             st.error("Die Zuweisung konnte nicht durchgeführt werden.")
                     with col2:
@@ -355,11 +355,34 @@ if st.session_state.user_is_logged_in:
             st.session_state.selected_customer_id = None
     
     st.subheader("Gebietskarte")
-    vertreter_liste = sorted(df['Vertreter_Name'].unique())
-    palette = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
-    farb_map = {name: palette[i % len(palette)] for i, name in enumerate(vertreter_liste)}
     
-    karte_obj = zeichne_karte(df_filtered_display, farb_map, st.session_state.selected_customer_id)
+    # Erstelle einen Cache-Key basierend auf Daten und Auswahl
+    cache_key = f"karte_{hash(str(df_filtered_display[['Kunden_Nr', 'Vertreter_Name']].values.tobytes()))}_{st.session_state.selected_customer_id}"
+    
+    # Prüfe ob sich die Daten geändert haben
+    if 'last_karte_data_hash' not in st.session_state:
+        st.session_state.last_karte_data_hash = None
+    
+    current_data_hash = hash(str(df_filtered_display[['Kunden_Nr', 'Vertreter_Name']].values.tobytes()))
+    
+    # Nur neu rendern wenn sich Daten oder Auswahl geändert haben
+    if (st.session_state.last_karte_data_hash != current_data_hash or 
+        'last_selected_customer' not in st.session_state or 
+        st.session_state.last_selected_customer != st.session_state.selected_customer_id):
+        
+        vertreter_liste = sorted(df['Vertreter_Name'].unique())
+        palette = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
+        farb_map = {name: palette[i % len(palette)] for i, name in enumerate(vertreter_liste)}
+        
+        karte_obj = zeichne_karte(df_filtered_display, farb_map, st.session_state.selected_customer_id)
+        
+        # Speichere aktuelle Daten für nächsten Vergleich
+        st.session_state.last_karte_data_hash = current_data_hash
+        st.session_state.last_selected_customer = st.session_state.selected_customer_id
+        st.session_state.cached_karte = karte_obj
+    else:
+        # Verwende gecachte Karte
+        karte_obj = st.session_state.cached_karte
 
     # Karten-Interaktion für Kundenauswahl
     map_data = st_folium(karte_obj, width='100%', height=700, returned_objects=['last_object_clicked_popup'])
@@ -398,7 +421,7 @@ if st.session_state.user_is_logged_in:
                     ):
                         st.session_state.selected_customer_id = kunde['Kunden_Nr']
                         st.toast(f"✅ Kunde {kunde['Kunden_Nr']} ausgewählt!")
-                        # Kein st.rerun() - Update erfolgt automatisch
+                        st.rerun()  # UI-Update für Dialog-Anzeige
         else:
             st.info("Keine Kunden gefunden.")
     else:
@@ -420,7 +443,7 @@ if st.session_state.user_is_logged_in:
                         if st.session_state.selected_customer_id != clicked_id:
                             st.session_state.selected_customer_id = clicked_id
                             st.toast(f"✅ Kunde {clicked_id} ausgewählt!")
-                            # Kein st.rerun() - Update erfolgt automatisch
+                            st.rerun()  # UI-Update für Dialog-Anzeige
                         break
         except (ValueError, IndexError, AttributeError):
             pass
