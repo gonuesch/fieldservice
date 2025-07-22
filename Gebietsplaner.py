@@ -462,9 +462,9 @@ if st.session_state.user_is_logged_in:
                 col_idx = idx % 5
                 with cols[col_idx]:
                     if st.button(
-                        f"Kunde {kunde['Kunden_Nr']}",
+                        f"{kunde['Kunden_Nr']} - {kunde['Kunde_ID_Name'][:25]}",
                         key=f"kunde_btn_{kunde['Kunden_Nr']}_{idx}_{col_idx}",
-                        help=f"{kunde['Kunde_ID_Name'][:40]}..."
+                        help=f"{kunde['Kunde_ID_Name']}"
                     ):
                         st.session_state.selected_customer_id = kunde['Kunden_Nr']
                         st.toast(f"✅ Kunde {kunde['Kunden_Nr']} ausgewählt!")
