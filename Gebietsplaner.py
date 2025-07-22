@@ -96,7 +96,8 @@ def initialisiere_app_zustand():
             # Hält die ID des angeklickten Kunden. Startet mit None (keine Auswahl).
             st.session_state.selected_customer_id = None
             # Speichert die Auswahl im Multi-Select-Filter, um sie über Reruns hinweg zu erhalten.
-            st.session_state.selected_vertreter = sorted(st.session_state.df_aktuell['Vertreter_Name'].unique().tolist())
+            # Initialisiere mit leeren Array, wird später basierend auf Filter gesetzt
+            st.session_state.selected_vertreter = []
             # Für Undo-Funktionalität
             st.session_state.zuweisung_history = []
             
@@ -259,13 +260,25 @@ if st.session_state.user_is_logged_in:
     
     col1, col2 = st.sidebar.columns(2)
     if col1.button("Alle auswählen"):
-        st.session_state.selected_vertreter = verfuegbare_vertreter
+        st.session_state.selected_vertreter = verfuegbare_vertreter.copy()
         st.rerun()
     if col2.button("Auswahl aufheben"):
         st.session_state.selected_vertreter = []
         st.rerun()
 
-    selected_vertreter = st.sidebar.multiselect('Angezeigte Vertreter:', options=verfuegbare_vertreter, default=st.session_state.get('selected_vertreter'))
+    # Stelle sicher, dass nur verfügbare Vertreter als Default gesetzt werden
+    current_selected = st.session_state.get('selected_vertreter', [])
+    valid_default = [v for v in current_selected if v in verfuegbare_vertreter]
+    
+    # Beim ersten Laden alle Vertreter auswählen, wenn keine Filter gesetzt sind
+    if not valid_default and selected_verlag == 'Alle Verlage':
+        valid_default = verfuegbare_vertreter
+    
+    selected_vertreter = st.sidebar.multiselect(
+        'Angezeigte Vertreter:', 
+        options=verfuegbare_vertreter, 
+        default=valid_default
+    )
     st.session_state.selected_vertreter = selected_vertreter
 
     df_filtered_display = df[df['Vertreter_Name'].isin(selected_vertreter)]
