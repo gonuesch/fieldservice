@@ -2,7 +2,7 @@
 
 import streamlit as st
 import folium
-from scipy.spatial import ConvexHull
+# from scipy.spatial import ConvexHull  # AUSKOMMENTIERT: Nicht mehr benötigt
 import pandas as pd
 
 @st.cache_data(ttl=3600)  # 1 Stunde Cache für Karten-Rendering
@@ -19,27 +19,31 @@ def zeichne_karte(dataframe, farb_map, selected_customer_id=None):
     # Karte initialisieren
     karte = folium.Map(location=[51.1657, 10.4515], zoom_start=6, tiles="cartodbpositron")
 
-    # OPTIMIERT: ConvexHull nur für Gebiete mit mehr als 5 Kunden
+    # AUSKOMMENTIERT: ConvexHull für bessere Performance
+    # for vertreter_name in dataframe['Vertreter_Name'].unique():
+    #     vertreter_daten = dataframe[dataframe['Vertreter_Name'] == vertreter_name]
+    #     kunden_punkte = vertreter_daten[['Latitude', 'Longitude']].values
+    #     
+    #     # Gebietsfläche (Convex Hull) - nur bei ausreichend Kunden
+    #     if len(kunden_punkte) >= 5:  # Erhöht von 3 auf 5 für bessere Performance
+    #         try:
+    #             hull = ConvexHull(kunden_punkte)
+    #             hull_punkte = [list(p) for p in kunden_punkte[hull.vertices]]
+    #             folium.Polygon(
+    #                 locations=hull_punkte,
+    #                 color=farb_map.get(vertreter_name, 'gray'),
+    #                 fill=True,
+    #                 fill_color=farb_map.get(vertreter_name, 'gray'),
+    #                 fill_opacity=0.2,
+    #                 popup=f"<b>Gebiet: {vertreter_name}</b><br>Kunden: {len(vertreter_daten)}"
+    #             ).add_to(karte)
+    #         except Exception:
+    #             pass
+            
+    # Wohnort-Marker für alle Vertreter
     for vertreter_name in dataframe['Vertreter_Name'].unique():
         vertreter_daten = dataframe[dataframe['Vertreter_Name'] == vertreter_name]
-        kunden_punkte = vertreter_daten[['Latitude', 'Longitude']].values
         
-        # Gebietsfläche (Convex Hull) - nur bei ausreichend Kunden
-        if len(kunden_punkte) >= 5:  # Erhöht von 3 auf 5 für bessere Performance
-            try:
-                hull = ConvexHull(kunden_punkte)
-                hull_punkte = [list(p) for p in kunden_punkte[hull.vertices]]
-                folium.Polygon(
-                    locations=hull_punkte,
-                    color=farb_map.get(vertreter_name, 'gray'),
-                    fill=True,
-                    fill_color=farb_map.get(vertreter_name, 'gray'),
-                    fill_opacity=0.2,
-                    popup=f"<b>Gebiet: {vertreter_name}</b><br>Kunden: {len(vertreter_daten)}"
-                ).add_to(karte)
-            except Exception:
-                pass
-            
         # Wohnort als Stern-Marker - nur wenn Koordinaten vorhanden
         wohnort_lat = vertreter_daten['Wohnort_Lat'].iloc[0]
         wohnort_lon = vertreter_daten['Wohnort_Lon'].iloc[0]
