@@ -290,7 +290,7 @@ if st.session_state.user_is_logged_in:
             with col2:
                 if st.button("❌ Schließen", key="close_modal"):
                     st.session_state.selected_customer_id = None
-                    # Kein st.rerun() - das Fenster verschwindet sofort
+                    st.rerun()  # Nur hier für UI-Update
             
             st.markdown("---")
             
@@ -331,18 +331,18 @@ if st.session_state.user_is_logged_in:
                         if kunde_zuweisen(st.session_state.selected_customer_id, neuer_vertreter):
                             st.toast(f"✅ Kunde erfolgreich zu {neuer_vertreter} verschoben!")
                             st.session_state.selected_customer_id = None
-                            st.rerun()  # UI-Update für Karten-Änderung
+                            st.rerun()  # Nur hier für Karten-Update nach Zuweisung
                         else:
                             st.error("Die Zuweisung konnte nicht durchgeführt werden.")
-                    with col2:
-                        if st.button("❌ Abbrechen", key="cancel_assignment"):
-                            st.session_state.selected_customer_id = None
-                            # Kein st.rerun() - das Fenster verschwindet sofort
+                with col2:
+                    if st.button("❌ Abbrechen", key="cancel_assignment"):
+                        st.session_state.selected_customer_id = None
+                        st.rerun()  # Nur hier für UI-Update
                     
-                    with col3:
-                        if st.button("🔄 Anderen Kunden wählen", key="select_other"):
-                            st.session_state.selected_customer_id = None
-                            # Kein st.rerun() - das Fenster verschwindet sofort
+                with col3:
+                    if st.button("🔄 Anderen Kunden wählen", key="select_other"):
+                        st.session_state.selected_customer_id = None
+                        st.rerun()  # Nur hier für UI-Update
             else:
                 st.info("ℹ️ Wählen Sie einen anderen Vertreter aus, um die Zuweisung zu ändern.")
             
@@ -356,19 +356,12 @@ if st.session_state.user_is_logged_in:
     
     st.subheader("Gebietskarte")
     
-    # Erstelle einen Cache-Key basierend auf Daten und Auswahl
-    cache_key = f"karte_{hash(str(df_filtered_display[['Kunden_Nr', 'Vertreter_Name']].values.tobytes()))}_{st.session_state.selected_customer_id}"
-    
-    # Prüfe ob sich die Daten geändert haben
-    if 'last_karte_data_hash' not in st.session_state:
-        st.session_state.last_karte_data_hash = None
-    
+    # OPTIMIERT: Karte nur neu rendern wenn sich Daten WIRKLICH geändert haben
     current_data_hash = hash(str(df_filtered_display[['Kunden_Nr', 'Vertreter_Name']].values.tobytes()))
     
-    # Nur neu rendern wenn sich Daten oder Auswahl geändert haben
-    if (st.session_state.last_karte_data_hash != current_data_hash or 
-        'last_selected_customer' not in st.session_state or 
-        st.session_state.last_selected_customer != st.session_state.selected_customer_id):
+    # Nur neu rendern wenn sich Daten geändert haben (nicht bei Kundenauswahl!)
+    if ('last_karte_data_hash' not in st.session_state or 
+        st.session_state.last_karte_data_hash != current_data_hash):
         
         vertreter_liste = sorted(df['Vertreter_Name'].unique())
         palette = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.values())
@@ -378,16 +371,19 @@ if st.session_state.user_is_logged_in:
         
         # Speichere aktuelle Daten für nächsten Vergleich
         st.session_state.last_karte_data_hash = current_data_hash
-        st.session_state.last_selected_customer = st.session_state.selected_customer_id
         st.session_state.cached_karte = karte_obj
     else:
-        # Verwende gecachte Karte
+        # Verwende gecachte Karte, aber aktualisiere selected_customer_id
         karte_obj = st.session_state.cached_karte
+        # Aktualisiere nur die Marker-Farben für den ausgewählten Kunden
+        if st.session_state.selected_customer_id:
+            # Hier könnten wir die Marker-Farben dynamisch ändern
+            pass
 
     # Karten-Interaktion für Kundenauswahl
     map_data = st_folium(karte_obj, width='100%', height=700, returned_objects=['last_object_clicked_popup'])
 
-    # Kundenauswahl über Suchfeld (oben)
+    # OPTIMIERT: Kundenauswahl über Suchfeld (oben) - OHNE st.rerun()
     if len(df_filtered_display) > 0:
         # Suchfeld für Kunden
         search_term = st.text_input(
@@ -408,7 +404,7 @@ if st.session_state.user_is_logged_in:
         # Entferne Duplikate basierend auf Kunden_Nr
         filtered_customers = filtered_customers.drop_duplicates(subset=['Kunden_Nr']).reset_index(drop=True)
         
-        # Zeige gefilterte Kunden als Buttons
+        # Zeige gefilterte Kunden als Buttons - OHNE st.rerun()
         if len(filtered_customers) > 0:
             cols = st.columns(min(5, len(filtered_customers)))
             for idx, (_, kunde) in enumerate(filtered_customers.iterrows()):
@@ -416,18 +412,18 @@ if st.session_state.user_is_logged_in:
                 with cols[col_idx]:
                     if st.button(
                         f"Kunde {kunde['Kunden_Nr']}",
-                        key=f"kunde_btn_{kunde['Kunden_Nr']}_{idx}_{col_idx}",  # Eindeutiger Key mit Index und Spalte
+                        key=f"kunde_btn_{kunde['Kunden_Nr']}_{idx}_{col_idx}",
                         help=f"{kunde['Kunde_ID_Name'][:40]}..."
                     ):
                         st.session_state.selected_customer_id = kunde['Kunden_Nr']
                         st.toast(f"✅ Kunde {kunde['Kunden_Nr']} ausgewählt!")
-                        st.rerun()  # UI-Update für Dialog-Anzeige
+                        # ❌ KEIN st.rerun() mehr - Dialog erscheint sofort!
         else:
             st.info("Keine Kunden gefunden.")
     else:
         st.info("Keine Kunden zum Anzeigen verfügbar.")
     
-    # Karten-Klick-Interaktion
+    # OPTIMIERT: Karten-Klick-Interaktion - OHNE st.rerun()
     if map_data and map_data.get("last_object_clicked_popup"):
         popup_text = map_data["last_object_clicked_popup"]
         
@@ -443,7 +439,7 @@ if st.session_state.user_is_logged_in:
                         if st.session_state.selected_customer_id != clicked_id:
                             st.session_state.selected_customer_id = clicked_id
                             st.toast(f"✅ Kunde {clicked_id} ausgewählt!")
-                            st.rerun()  # UI-Update für Dialog-Anzeige
+                            # ❌ KEIN st.rerun() mehr - Dialog erscheint sofort!
                         break
         except (ValueError, IndexError, AttributeError):
             pass

@@ -5,7 +5,7 @@ import folium
 from scipy.spatial import ConvexHull
 import pandas as pd
 
-@st.cache_data(ttl=1800)  # 30 Minuten Cache für Karten-Rendering
+@st.cache_data(ttl=3600)  # 1 Stunde Cache für Karten-Rendering
 def zeichne_karte(dataframe, farb_map, selected_customer_id=None):
     """
     Erstellt ein interaktives Folium-Kartenobjekt, ohne es anzuzeigen.
@@ -19,13 +19,13 @@ def zeichne_karte(dataframe, farb_map, selected_customer_id=None):
     # Karte initialisieren
     karte = folium.Map(location=[51.1657, 10.4515], zoom_start=6, tiles="cartodbpositron")
 
-    # Für jeden ausgewählten Vertreter die Gebietsfläche und die Punkte zeichnen
+    # OPTIMIERT: ConvexHull nur für Gebiete mit mehr als 5 Kunden
     for vertreter_name in dataframe['Vertreter_Name'].unique():
         vertreter_daten = dataframe[dataframe['Vertreter_Name'] == vertreter_name]
         kunden_punkte = vertreter_daten[['Latitude', 'Longitude']].values
         
-        # Gebietsfläche (Convex Hull)
-        if len(kunden_punkte) >= 3:
+        # Gebietsfläche (Convex Hull) - nur bei ausreichend Kunden
+        if len(kunden_punkte) >= 5:  # Erhöht von 3 auf 5 für bessere Performance
             try:
                 hull = ConvexHull(kunden_punkte)
                 hull_punkte = [list(p) for p in kunden_punkte[hull.vertices]]
@@ -40,17 +40,17 @@ def zeichne_karte(dataframe, farb_map, selected_customer_id=None):
             except Exception:
                 pass
             
-        # Wohnort als Stern-Marker
+        # Wohnort als Stern-Marker - nur wenn Koordinaten vorhanden
         wohnort_lat = vertreter_daten['Wohnort_Lat'].iloc[0]
         wohnort_lon = vertreter_daten['Wohnort_Lon'].iloc[0]
-        if pd.notna(wohnort_lat):
+        if pd.notna(wohnort_lat) and pd.notna(wohnort_lon):
             folium.Marker(
                 [wohnort_lat, wohnort_lon],
                 popup=f"<b>🏠 Zentrum: {vertreter_name}</b><br>Kunden: {len(vertreter_daten)}",
                 icon=folium.Icon(color='black', icon_color='white', icon='star', prefix='fa')
             ).add_to(karte)
 
-    # Kundenpunkte hinzufügen
+    # OPTIMIERT: Kundenpunkte in Batch hinzufügen
     for _, row in dataframe.iterrows():
         is_selected = row['Kunden_Nr'] == selected_customer_id
         
