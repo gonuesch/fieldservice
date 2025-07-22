@@ -5,6 +5,9 @@ import pandas as pd
 import numpy as np
 import gspread
 from google.oauth2.service_account import Credentials
+import sqlite3
+import tempfile
+import os
 
 # Diese Funktion bleibt, um die Basisdaten zu laden
 @st.cache_data(ttl=7200)  # 2 Stunden Cache für bessere Performance
@@ -37,10 +40,55 @@ def lade_basis_daten():
         df_merged.sort_values('Kunden_Nr', inplace=True)
         df_merged.reset_index(drop=True, inplace=True)
         
+        # Erstelle In-Memory SQLite für bessere Performance
+        create_in_memory_db(df_merged)
+        
         return df_merged
         
     except Exception as e:
         st.error(f"Fehler beim Laden der Basisdaten aus Google Sheets: {e}")
+        return pd.DataFrame()
+
+def create_in_memory_db(df):
+    """Erstellt eine In-Memory SQLite Datenbank für bessere Performance."""
+    try:
+        # Erstelle temporäre SQLite-Datei
+        temp_db_path = tempfile.mktemp(suffix='.db')
+        
+        # Verbinde zur SQLite-Datenbank
+        conn = sqlite3.connect(temp_db_path)
+        
+        # Speichere DataFrame in SQLite
+        df.to_sql('kunden', conn, if_exists='replace', index=False)
+        
+        # Erstelle Indizes für bessere Performance
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_kunden_nr ON kunden(Kunden_Nr)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_vertreter ON kunden(Vertreter_Name)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_verlag ON kunden(Verlag)')
+        
+        # Speichere DB-Pfad im Session State
+        st.session_state.db_path = temp_db_path
+        st.session_state.db_conn = conn
+        
+        st.success("✅ In-Memory Datenbank erstellt für bessere Performance")
+        
+    except Exception as e:
+        st.warning(f"⚠️ In-Memory DB konnte nicht erstellt werden: {e}")
+
+@st.cache_data(ttl=3600)  # 1 Stunde Cache für Datenbankabfragen
+def query_kunden_db(query, params=None):
+    """Führt eine SQL-Abfrage auf der In-Memory Datenbank aus."""
+    try:
+        if 'db_conn' not in st.session_state:
+            return pd.DataFrame()
+        
+        if params:
+            return pd.read_sql_query(query, st.session_state.db_conn, params=params)
+        else:
+            return pd.read_sql_query(query, st.session_state.db_conn)
+            
+    except Exception as e:
+        st.warning(f"⚠️ Datenbankabfrage fehlgeschlagen: {e}")
         return pd.DataFrame()
 
 # --- NEUE FUNKTIONEN FÜR SZENARIEN ---

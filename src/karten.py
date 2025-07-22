@@ -5,6 +5,7 @@ import folium
 from scipy.spatial import ConvexHull
 import pandas as pd
 
+@st.cache_data(ttl=1800)  # 30 Minuten Cache für Karten-Rendering
 def zeichne_karte(dataframe, farb_map, selected_customer_id=None):
     """
     Erstellt ein interaktives Folium-Kartenobjekt, ohne es anzuzeigen.

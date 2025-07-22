@@ -331,7 +331,7 @@ if st.session_state.user_is_logged_in:
                         if kunde_zuweisen(st.session_state.selected_customer_id, neuer_vertreter):
                             st.toast(f"✅ Kunde erfolgreich zu {neuer_vertreter} verschoben!")
                             st.session_state.selected_customer_id = None
-                            st.rerun()
+                            # Kein st.rerun() - Update erfolgt automatisch
                         else:
                             st.error("Die Zuweisung konnte nicht durchgeführt werden.")
                     with col2:
@@ -393,12 +393,12 @@ if st.session_state.user_is_logged_in:
                 with cols[col_idx]:
                     if st.button(
                         f"Kunde {kunde['Kunden_Nr']}",
-                        key=f"kunde_btn_{kunde['Kunden_Nr']}_{idx}",  # Eindeutiger Key mit Index
+                        key=f"kunde_btn_{kunde['Kunden_Nr']}_{idx}_{col_idx}",  # Eindeutiger Key mit Index und Spalte
                         help=f"{kunde['Kunde_ID_Name'][:40]}..."
                     ):
                         st.session_state.selected_customer_id = kunde['Kunden_Nr']
                         st.toast(f"✅ Kunde {kunde['Kunden_Nr']} ausgewählt!")
-                        st.rerun()
+                        # Kein st.rerun() - Update erfolgt automatisch
         else:
             st.info("Keine Kunden gefunden.")
     else:
@@ -420,7 +420,7 @@ if st.session_state.user_is_logged_in:
                         if st.session_state.selected_customer_id != clicked_id:
                             st.session_state.selected_customer_id = clicked_id
                             st.toast(f"✅ Kunde {clicked_id} ausgewählt!")
-                            st.rerun()
+                            # Kein st.rerun() - Update erfolgt automatisch
                         break
         except (ValueError, IndexError, AttributeError):
             pass
