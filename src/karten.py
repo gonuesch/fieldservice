@@ -78,7 +78,7 @@ def zeichne_karte(dataframe, farb_map, selected_customer_id=None):
             fill=True,
             fill_color=color,
             fill_opacity=fill_opacity,
-            tooltip=f"Kunde {row['Kunden_Nr']}: {row['Kunde_ID_Name']}",
+            tooltip=f"Kunde {row['Kunden_Nr']}: {row['Kunde_ID_Name']}<br>Vertreter: {row['Vertreter_Name']}",
             # Füge data-Attribut für einfachere Extraktion hinzu
             popup_props={'data-customer-id': str(row['Kunden_Nr'])}
         ).add_to(karte)
