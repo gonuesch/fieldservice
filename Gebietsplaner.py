@@ -82,16 +82,32 @@ def initialisiere_app_zustand():
     Dies stellt sicher, dass die Daten geladen und Zustände für die Interaktion gesetzt werden.
     """
     if 'app_initialisiert' not in st.session_state:
-        st.session_state.df_basis = lade_basis_daten()
-        # df_aktuell hält den Zustand der Gebietsverteilung, die angezeigt und bearbeitet wird.
-        st.session_state.df_aktuell = st.session_state.df_basis.copy()
-        st.session_state.app_initialisiert = True
-        # Hält die ID des angeklickten Kunden. Startet mit None (keine Auswahl).
-        st.session_state.selected_customer_id = None
-        # Speichert die Auswahl im Multi-Select-Filter, um sie über Reruns hinweg zu erhalten.
-        st.session_state.selected_vertreter = sorted(st.session_state.df_aktuell['Vertreter_Name'].unique().tolist())
-        # Für Undo-Funktionalität
-        st.session_state.zuweisung_history = []
+        try:
+            st.session_state.df_basis = lade_basis_daten()
+            # Prüfe ob Daten erfolgreich geladen wurden
+            if st.session_state.df_basis is None or st.session_state.df_basis.empty:
+                st.error("❌ Keine Daten geladen. Bitte überprüfen Sie die Google Sheets API-Verbindung.")
+                st.session_state.app_initialisiert = False
+                return
+            
+            # df_aktuell hält den Zustand der Gebietsverteilung, die angezeigt und bearbeitet wird.
+            st.session_state.df_aktuell = st.session_state.df_basis.copy()
+            st.session_state.app_initialisiert = True
+            # Hält die ID des angeklickten Kunden. Startet mit None (keine Auswahl).
+            st.session_state.selected_customer_id = None
+            # Speichert die Auswahl im Multi-Select-Filter, um sie über Reruns hinweg zu erhalten.
+            st.session_state.selected_vertreter = sorted(st.session_state.df_aktuell['Vertreter_Name'].unique().tolist())
+            # Für Undo-Funktionalität
+            st.session_state.zuweisung_history = []
+            
+        except Exception as e:
+            st.error(f"❌ Fehler beim Laden der Basisdaten: {str(e)}")
+            st.info("💡 Mögliche Lösungen:")
+            st.info("• Überprüfen Sie die Google Sheets API-Verbindung")
+            st.info("• Stellen Sie sicher, dass die Berechtigungen korrekt sind")
+            st.info("• Versuchen Sie es in einigen Minuten erneut")
+            st.session_state.app_initialisiert = False
+            return
 
 def optimierungs_algorithmus(dataframe_basis, weights, constraints):
     """
@@ -166,6 +182,22 @@ if 'user_is_logged_in' not in st.session_state:
 if st.session_state.user_is_logged_in:
     # --- HAUPTANWENDUNG NACH LOGIN ---
     initialisiere_app_zustand()
+    
+    # Prüfe ob die App erfolgreich initialisiert wurde
+    if not st.session_state.get('app_initialisiert', False):
+        st.title("🗺️ Interaktive Gebietsplanung")
+        st.error("❌ Die Anwendung konnte nicht initialisiert werden.")
+        st.info("🔧 Bitte versuchen Sie es in einigen Minuten erneut oder kontaktieren Sie den Administrator.")
+        
+        # Reload-Button
+        if st.button("🔄 Seite neu laden"):
+            # Reset session state für neuen Versuch
+            if 'app_initialisiert' in st.session_state:
+                del st.session_state.app_initialisiert
+            st.rerun()
+        
+        st.stop()  # Stoppe die Ausführung hier
+    
     st.title("🗺️ Interaktive Gebietsplanung")
 
     # Der angezeigte DataFrame ist immer der, der im Session State gespeichert ist
