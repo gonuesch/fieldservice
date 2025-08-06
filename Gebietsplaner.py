@@ -71,6 +71,40 @@ st.markdown("""
     border-radius: 5px;
     margin: 10px 0;
 }
+
+.login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.login-box {
+    background: white;
+    padding: 40px;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    text-align: center;
+    max-width: 400px;
+    width: 100%;
+}
+
+.login-title {
+    color: #333;
+    margin-bottom: 30px;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.password-input {
+    margin: 20px 0;
+}
+
+.login-button {
+    margin-top: 20px;
+    width: 100%;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -109,8 +143,6 @@ def initialisiere_app_zustand():
             st.info("• Versuchen Sie es in einigen Minuten erneut")
             st.session_state.app_initialisiert = False
             return
-
-
 
 def kunde_zuweisen(kunden_id, neuer_vertreter):
     """
@@ -160,15 +192,67 @@ def undo_letzte_zuweisung():
         return True
     return False
 
+def check_password(password):
+    """
+    Überprüft das eingegebene Passwort gegen das in den Secrets gespeicherte Passwort.
+    """
+    try:
+        # Hole das Passwort aus den Streamlit Secrets
+        correct_password = st.secrets["password"]["password"]
+        return password == correct_password
+    except Exception as e:
+        st.error(f"Fehler beim Zugriff auf die Secrets: {e}")
+        return False
 
-# --- 4. LOGIN-LOGIK UND APP-STEUERUNG (PLATZHALTER) ---
-# Hier wäre Ihre st.login() Logik integriert.
-# Für die Entwicklung ist der Nutzer standardmäßig eingeloggt.
+# --- 4. LOGIN-LOGIK UND APP-STEUERUNG ---
+
+# Initialisiere Login-Status
 if 'user_is_logged_in' not in st.session_state:
-    st.session_state.user_is_logged_in = True 
+    st.session_state.user_is_logged_in = False
 
+# Login-Seite anzeigen, wenn nicht eingeloggt
+if not st.session_state.user_is_logged_in:
+    st.markdown("""
+    <div class="login-container">
+        <div class="login-box">
+            <div class="login-title">🗺️ Gebietsplaner</div>
+            <p style="color: #666; margin-bottom: 30px;">Bitte geben Sie das Passwort ein, um fortzufahren</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Zentriere das Login-Formular
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("---")
+        
+        # Passwort-Eingabe
+        password = st.text_input(
+            "🔐 Passwort:",
+            type="password",
+            placeholder="Passwort eingeben",
+            key="password_input"
+        )
+        
+        # Login-Button
+        if st.button("🚀 Anmelden", type="primary", use_container_width=True):
+            if check_password(password):
+                st.session_state.user_is_logged_in = True
+                st.success("✅ Anmeldung erfolgreich!")
+                st.rerun()
+            else:
+                st.error("❌ Falsches Passwort. Bitte versuchen Sie es erneut.")
+                # Passwort-Feld leeren
+                st.session_state.password_input = ""
+                st.rerun()
+        
+        st.markdown("---")
+        st.info("💡 **Hinweis:** Das Passwort ist beim Administrator erhältlich.")
+    
+    st.stop()  # Stoppe die Ausführung hier
+
+# --- HAUPTANWENDUNG NACH LOGIN ---
 if st.session_state.user_is_logged_in:
-    # --- HAUPTANWENDUNG NACH LOGIN ---
     initialisiere_app_zustand()
     
     # Prüfe ob die App erfolgreich initialisiert wurde
@@ -194,6 +278,16 @@ if st.session_state.user_is_logged_in:
     # --- SEITENLEISTE (Sidebar) ---
     with st.sidebar:
         st.header("🗺️ Manuelle Zuweisung per Klick")
+        
+        # Logout-Button
+        if st.button("🚪 Abmelden", type="secondary"):
+            st.session_state.user_is_logged_in = False
+            # Session State zurücksetzen
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
+        
+        st.markdown("---")
         
         # Undo-Funktion
         if st.session_state.zuweisung_history:
@@ -507,8 +601,3 @@ if st.session_state.user_is_logged_in:
                         break
         except (ValueError, IndexError, AttributeError):
             pass
-    
-
-
-else:
-    st.error("Bitte einloggen, um die Anwendung zu nutzen.")
